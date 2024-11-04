@@ -423,6 +423,7 @@ export default function UserProfile() {
           <Tabs defaultValue="profile" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Perfil</TabsTrigger>
+              
               <TabsTrigger value="photos">Fotos</TabsTrigger>
               <TabsTrigger value="comments">Comentarios</TabsTrigger>
             </TabsList>
