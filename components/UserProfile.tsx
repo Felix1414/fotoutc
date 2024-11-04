@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MapPin, Mail, Edit2, Camera, Loader2, Save, X, RefreshCw, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getUserById, updateUser } from '@/lib/api-config';
+import { getUserById, updateUser, uploadFileToS3 } from '@/lib/api-config';
 
 interface UserProfileProps {
   userId: string;
@@ -70,7 +70,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
     try {
       const userData = await getUserById(userId);
       if (userData) {
-        setUser(userData);
+        setUser(userData as User);
         setName(userData.name);
         setDescription(userData.description || '');
         setLocation(userData.location || '');
@@ -142,7 +142,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
     e.preventDefault();
     try {
       const updatedUser = await updateUser(userId, { name, description, location, profilePicture });
-      setUser(updatedUser);
+      setUser(updatedUser as User);
       setIsEditing(false);
       toast({
         title: "Éxito",
@@ -166,21 +166,14 @@ export default function UserProfile({ userId }: UserProfileProps) {
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      const buffer = await file.arrayBuffer();
+      const fileName = `${userId}_${Date.now()}_${file.name}`;
+      const url = await uploadFileToS3(Buffer.from(buffer), fileName);
+      setProfilePicture(url);
+      toast({
+        title: "Éxito",
+        description: "Imagen de perfil subida correctamente",
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setProfilePicture(data.url);
-        toast({
-          title: "Éxito",
-          description: "Imagen de perfil subida correctamente",
-        });
-      } else {
-        throw new Error('Failed to upload image');
-      }
     } catch (error) {
       toast({
         title: "Error",
@@ -287,7 +280,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
   if (profileError) {
     return (
       <Alert variant="destructive" className="m-4">
-        <AlertCircle className="h-4 w-4" />
+        <AlertCircle  className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
         <AlertDescription>{profileError}</AlertDescription>
         <Button onClick={fetchUserProfile} variant="outline" size="sm" className="mt-2">
@@ -405,8 +398,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
                       <Textarea
                         id="description"
                         value={description}
-                        onChange={(e) => 
-                        setDescription(e.target.value)}
+                        onChange={(e) => setDescription(e.target.value)}
                         className="mt-1"
                         rows={3}
                       />
