@@ -1,8 +1,7 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { MongoClient, ObjectId } from 'mongodb';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import jwt from 'jsonwebtoken';
 import emailjs from '@emailjs/browser';
-import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 
 // MongoDB Configuration
@@ -56,7 +55,7 @@ const createToken = (payload: any) => {
 // MongoDB Functions
 async function connectToDatabase() {
   if (!mongoClient.isConnected()) await mongoClient.connect();
-  return mongoClient.db('fotoUTC'); // Replace 'fotoUTC' with your actual database name
+  return mongoClient.db('fotoUTC');
 }
 
 export async function getUserById(userId: string) {
