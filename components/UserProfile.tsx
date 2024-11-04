@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MapPin, Mail, Edit2, Camera, Loader2, Save, X, RefreshCw, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getUserById, updateUser } from '@/lib/api-config';
+
+interface UserProfileProps {
+  userId: string;
+}
 
 interface User {
   id: string;
@@ -34,7 +39,7 @@ interface Comment {
   createdAt: string;
 }
 
-export default function UserProfile() {
+export default function UserProfile({ userId }: UserProfileProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
@@ -57,35 +62,23 @@ export default function UserProfile() {
 
   useEffect(() => {
     fetchUserProfile();
-  }, []);
+  }, [userId]);
 
   const fetchUserProfile = async () => {
     setIsLoadingProfile(true);
     setProfileError(null);
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (!token) {
-      setProfileError("No se encontró token de autenticación");
-      setIsLoadingProfile(false);
-      return;
-    }
-
     try {
-      const response = await fetch('/api/user', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (response.ok) {
-        const userData = await response.json();
+      const userData = await getUserById(userId);
+      if (userData) {
         setUser(userData);
         setName(userData.name);
-        setDescription(userData.description);
-        setLocation(userData.location);
-        setProfilePicture(userData.profilePicture);
-        fetchUserPhotos(token);
-        fetchUserComments(token);
+        setDescription(userData.description || '');
+        setLocation(userData.location || '');
+        setProfilePicture(userData.profilePicture || '');
+        fetchUserPhotos(userId);
+        fetchUserComments(userId);
       } else {
-        throw new Error('Failed to fetch user profile');
+        throw new Error('User not found');
       }
     } catch (error) {
       setProfileError("No se pudo cargar el perfil del usuario");
@@ -99,15 +92,11 @@ export default function UserProfile() {
     }
   };
 
-  const fetchUserPhotos = async (token: string) => {
+  const fetchUserPhotos = async (userId: string) => {
     setIsLoadingPhotos(true);
     setPhotosError(null);
     try {
-      const response = await fetch('fotoutc/pages/api/photos/[id]/comment.ts', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await fetch(`/api/photos/${userId}`);
       if (response.ok) {
         const photos = await response.json();
         setUploadedPhotos(photos);
@@ -126,15 +115,11 @@ export default function UserProfile() {
     }
   };
 
-  const fetchUserComments = async (token: string) => {
+  const fetchUserComments = async (userId: string) => {
     setIsLoadingComments(true);
     setCommentsError(null);
     try {
-      const response = await fetch('/api/user/comments', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await fetch(`/api/comments/${userId}`);
       if (response.ok) {
         const comments = await response.json();
         setUserComments(comments);
@@ -155,37 +140,14 @@ export default function UserProfile() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (!token) {
-      toast({
-        title: "Error",
-        description: "No se encontró token de autenticación",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      const response = await fetch('/api/user', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ name, description, location, profilePicture })
+      const updatedUser = await updateUser(userId, { name, description, location, profilePicture });
+      setUser(updatedUser);
+      setIsEditing(false);
+      toast({
+        title: "Éxito",
+        description: "Perfil actualizado correctamente",
       });
-
-      if (response.ok) {
-        const updatedUser = await response.json();
-        setUser(updatedUser);
-        setIsEditing(false);
-        toast({
-          title: "Éxito",
-          description: "Perfil actualizado correctamente",
-        });
-      } else {
-        throw new Error('Failed to update user profile');
-      }
     } catch (error) {
       toast({
         title: "Error",
@@ -283,22 +245,11 @@ export default function UserProfile() {
   };
 
   const handleSaveComment = async (commentId: string) => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (!token) {
-      toast({
-        title: "Error",
-        description: "No se encontró token de autenticación",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       const response = await fetch(`/api/comments/${commentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ text: editedCommentText })
       });
@@ -415,7 +366,7 @@ export default function UserProfile() {
               )}
             </AnimatePresence>
           </motion.div>
-          <CardTitle className="text-3xl font-bold text-center mt-4  bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+          <CardTitle className="text-3xl font-bold text-center mt-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
             {name}
           </CardTitle>
         </CardHeader>
@@ -423,7 +374,6 @@ export default function UserProfile() {
           <Tabs defaultValue="profile" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Perfil</TabsTrigger>
-              
               <TabsTrigger value="photos">Fotos</TabsTrigger>
               <TabsTrigger value="comments">Comentarios</TabsTrigger>
             </TabsList>
@@ -455,7 +405,8 @@ export default function UserProfile() {
                       <Textarea
                         id="description"
                         value={description}
-                        onChange={(e) => setDescription(e.target.value)}
+                        onChange={(e) => 
+                        setDescription(e.target.value)}
                         className="mt-1"
                         rows={3}
                       />
@@ -546,7 +497,7 @@ export default function UserProfile() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{photosError}</AlertDescription>
-                  <Button onClick={() => fetchUserPhotos(localStorage.getItem('token') || '')} variant="outline" size="sm" className="mt-2">
+                  <Button onClick={() => fetchUserPhotos(userId)} variant="outline" size="sm" className="mt-2">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Intentar de nuevo
                   </Button>
@@ -581,7 +532,7 @@ export default function UserProfile() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{commentsError}</AlertDescription>
-                  <Button onClick={() => fetchUserComments(localStorage.getItem('token') || '')} variant="outline" size="sm" className="mt-2">
+                  <Button onClick={() => fetchUserComments(userId)} variant="outline" size="sm" className="mt-2">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Intentar de nuevo
                   </Button>
