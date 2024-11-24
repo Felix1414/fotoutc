@@ -5,7 +5,14 @@ import emailjs from '@emailjs/browser';
 import nodemailer from 'nodemailer';
 
 // MongoDB Configuration
-const mongoClient = new MongoClient(process.env.MONGODB_URI as string);
+let mongoClient: MongoClient;
+let mongoClientPromise: Promise<MongoClient>;
+
+// Conexión reutilizable para MongoDB en entornos de servidor como Render
+if (!mongoClient) {
+  mongoClient = new MongoClient(process.env.MONGODB_URI as string);
+  mongoClientPromise = mongoClient.connect();
+}
 
 // AWS S3 Configuration
 const s3Client = new S3Client({
@@ -33,41 +40,51 @@ const gmailTransporter = nodemailer.createTransport({
   },
 });
 
-// PayPal Configuration
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-
-// News API Configuration
-const NEWS_API_KEY = process.env.NEWS_API_KEY;
-
 // JWT Configuration
-const verifyToken = (token: string) => {
+export const verifyToken = (token: string) => {
   try {
     return jwt.verify(token, process.env.JWT_SECRET as string);
   } catch (error) {
+    console.error('Error verificando el token:', error);
     return null;
   }
 };
 
-const createToken = (payload: any) => {
-  return jwt.sign(payload, process.env.JWT_SECRET as string);
+export const createToken = (payload: any) => {
+  return jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '1h' });
 };
 
 // MongoDB Functions
 async function connectToDatabase() {
-  if (!mongoClient.isConnected()) await mongoClient.connect();
-  return mongoClient.db('fotoUTC');
+  try {
+    const client = await mongoClientPromise;
+    return client.db('fotoUTC');
+  } catch (error) {
+    console.error('Error conectando a MongoDB:', error);
+    throw error;
+  }
 }
 
 export async function getUserById(userId: string) {
-  const db = await connectToDatabase();
-  const users = db.collection('users');
-  return users.findOne({ _id: new ObjectId(userId) });
+  try {
+    const db = await connectToDatabase();
+    const users = db.collection('users');
+    return users.findOne({ _id: new ObjectId(userId) });
+  } catch (error) {
+    console.error('Error obteniendo usuario por ID:', error);
+    throw error;
+  }
 }
 
 export async function updateUser(userId: string, updateData: any) {
-  const db = await connectToDatabase();
-  const users = db.collection('users');
-  return users.updateOne({ _id: new ObjectId(userId) }, { $set: updateData });
+  try {
+    const db = await connectToDatabase();
+    const users = db.collection('users');
+    return users.updateOne({ _id: new ObjectId(userId) }, { $set: updateData });
+  } catch (error) {
+    console.error('Error actualizando usuario:', error);
+    throw error;
+  }
 }
 
 // S3 Functions
@@ -76,13 +93,14 @@ export async function uploadFileToS3(file: Buffer, fileName: string) {
     Bucket: process.env.AWS_S3_BUCKET_NAME as string,
     Key: fileName,
     Body: file,
+    ContentType: 'application/octet-stream',
   });
 
   try {
-    const response = await s3Client.send(command);
+    await s3Client.send(command);
     return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
   } catch (error) {
-    console.error('Error uploading file to S3:', error);
+    console.error('Error subiendo archivo a S3:', error);
     throw error;
   }
 }
@@ -98,7 +116,7 @@ export async function sendEmailWithEmailJS(templateParams: any) {
     );
     return response;
   } catch (error) {
-    console.error('Error sending email with Email.js:', error);
+    console.error('Error enviando email con Email.js:', error);
     throw error;
   }
 }
@@ -114,34 +132,31 @@ export async function sendEmailWithGmail(to: string, subject: string, text: stri
     });
     return info;
   } catch (error) {
-    console.error('Error sending email with Gmail:', error);
+    console.error('Error enviando email con Gmail:', error);
     throw error;
   }
 }
 
-// News API Function
+// Fetch News API Function
 export async function fetchNews() {
-  const url = `https://newsapi.org/v2/top-headlines?country=mx&apiKey=${NEWS_API_KEY}`;
+  const url = `https://newsapi.org/v2/top-headlines?country=mx&apiKey=${process.env.NEWS_API_KEY}`;
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`News API responded with status: ${response.status}`);
+      throw new Error(`News API respondió con estado: ${response.status}`);
     }
     const data = await response.json();
     return data.articles;
   } catch (error) {
-    console.error('Error fetching news:', error);
+    console.error('Error obteniendo noticias:', error);
     throw error;
   }
 }
 
 export {
-  mongoClient,
   s3Client,
   emailjsConfig,
   gmailTransporter,
-  PAYPAL_CLIENT_ID,
-  NEWS_API_KEY,
   verifyToken,
   createToken,
 };
