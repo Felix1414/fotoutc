@@ -41,7 +41,7 @@ const gmailTransporter = nodemailer.createTransport({
 });
 
 // JWT Configuration
-export const verifyToken = (token: string) => {
+const verifyToken = (token: string) => {
   try {
     return jwt.verify(token, process.env.JWT_SECRET as string);
   } catch (error) {
@@ -50,7 +50,7 @@ export const verifyToken = (token: string) => {
   }
 };
 
-export const createToken = (payload: any) => {
+const createToken = (payload: any) => {
   return jwt.sign(payload, process.env.JWT_SECRET as string, { expiresIn: '1h' });
 };
 
@@ -65,7 +65,7 @@ async function connectToDatabase() {
   }
 }
 
-export async function getUserById(userId: string) {
+async function getUserById(userId: string) {
   try {
     const db = await connectToDatabase();
     const users = db.collection('users');
@@ -76,7 +76,7 @@ export async function getUserById(userId: string) {
   }
 }
 
-export async function updateUser(userId: string, updateData: any) {
+async function updateUser(userId: string, updateData: any) {
   try {
     const db = await connectToDatabase();
     const users = db.collection('users');
@@ -88,7 +88,7 @@ export async function updateUser(userId: string, updateData: any) {
 }
 
 // S3 Functions
-export async function uploadFileToS3(file: Buffer, fileName: string) {
+async function uploadFileToS3(file: Buffer, fileName: string) {
   const command = new PutObjectCommand({
     Bucket: process.env.AWS_S3_BUCKET_NAME as string,
     Key: fileName,
@@ -106,7 +106,7 @@ export async function uploadFileToS3(file: Buffer, fileName: string) {
 }
 
 // Email.js Function
-export async function sendEmailWithEmailJS(templateParams: any) {
+async function sendEmailWithEmailJS(templateParams: any) {
   try {
     const response = await emailjs.send(
       emailjsConfig.serviceId as string,
@@ -122,7 +122,7 @@ export async function sendEmailWithEmailJS(templateParams: any) {
 }
 
 // Gmail Function
-export async function sendEmailWithGmail(to: string, subject: string, text: string) {
+async function sendEmailWithGmail(to: string, subject: string, text: string) {
   try {
     const info = await gmailTransporter.sendMail({
       from: process.env.GMAIL_USER,
@@ -138,7 +138,7 @@ export async function sendEmailWithGmail(to: string, subject: string, text: stri
 }
 
 // Fetch News API Function
-export async function fetchNews() {
+async function fetchNews() {
   const url = `https://newsapi.org/v2/top-headlines?country=mx&apiKey=${process.env.NEWS_API_KEY}`;
   try {
     const response = await fetch(url);
@@ -153,10 +153,18 @@ export async function fetchNews() {
   }
 }
 
+// Export
 export {
   s3Client,
   emailjsConfig,
   gmailTransporter,
   verifyToken,
   createToken,
+  connectToDatabase,
+  getUserById,
+  updateUser,
+  uploadFileToS3,
+  sendEmailWithEmailJS,
+  sendEmailWithGmail,
+  fetchNews,
 };
