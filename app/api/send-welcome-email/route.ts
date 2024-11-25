@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-
+import emailjs from '@emailjs/nodejs';
 
 emailjs.init({
   publicKey: process.env.EMAILJS_PUBLIC_KEY,
