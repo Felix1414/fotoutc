@@ -18,7 +18,8 @@ export async function registerUser(email: string, password: string) {
   const user = new User({ email, password: hashedPassword });
   await user.save();
 
-  const token = jwt.sign({ userId: user._id }, JWT_SECRET as jwt.Secret, { expiresIn: '1h' });
+  // Aquí, pasamos directamente JWT_SECRET como string
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
   return { user, token };
 }
 
@@ -33,6 +34,7 @@ export async function loginUser(email: string, password: string) {
     throw new Error('Contraseña incorrecta');
   }
 
-  const token = jwt.sign({ userId: user._id }, JWT_SECRET as jwt.Secret, { expiresIn: '1h' });
+  // Aquí también, pasamos directamente JWT_SECRET como string
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
   return { user, token };
 }
