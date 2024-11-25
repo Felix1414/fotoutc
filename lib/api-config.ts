@@ -5,23 +5,10 @@ import emailjs from '@emailjs/browser';
 import nodemailer from 'nodemailer';
 
 // MongoDB Configuration
-let mongoClient: MongoClient;
-let mongoClientPromise: Promise<MongoClient>;
-
-// Verificar si la variable ya está asignada antes de inicializarla
-if (!mongoClient) {
-  if (!process.env.MONGODB_URI) {
-    throw new Error('MONGODB_URI no está definido en las variables de entorno.');
-  }
-  mongoClient = new MongoClient(process.env.MONGODB_URI as string);
-  mongoClientPromise = mongoClient.connect();
-}
+const mongoClient = new MongoClient(process.env.MONGODB_URI as string);
+const mongoClientPromise = mongoClient.connect();
 
 // AWS S3 Configuration
-if (!process.env.AWS_REGION || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-  throw new Error('Las credenciales o la región de AWS no están definidas en las variables de entorno.');
-}
-
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
