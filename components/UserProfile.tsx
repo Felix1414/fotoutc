@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,11 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MapPin, Mail, Edit2, Camera, Loader2, Save, X, RefreshCw, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getUserById, updateUser, uploadFileToS3 } from '@/lib/api-config';
-
-interface UserProfileProps {
-  userId: string;
-}
+import { sendEmail } from '@/app/actions/email'; // Import the server action
 
 interface User {
   id: string;
@@ -39,7 +35,7 @@ interface Comment {
   createdAt: string;
 }
 
-export default function UserProfile({ userId }: UserProfileProps) {
+export default function UserProfile() {
   const [user, setUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
@@ -62,23 +58,35 @@ export default function UserProfile({ userId }: UserProfileProps) {
 
   useEffect(() => {
     fetchUserProfile();
-  }, [userId]);
+  }, []);
 
   const fetchUserProfile = async () => {
     setIsLoadingProfile(true);
     setProfileError(null);
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
+      setProfileError("No se encontró token de autenticación");
+      setIsLoadingProfile(false);
+      return;
+    }
+
     try {
-      const userData = await getUserById(userId);
-      if (userData) {
-        setUser(userData as User);
+      const response = await fetch('/api/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
         setName(userData.name);
-        setDescription(userData.description || '');
-        setLocation(userData.location || '');
-        setProfilePicture(userData.profilePicture || '');
-        fetchUserPhotos(userId);
-        fetchUserComments(userId);
+        setDescription(userData.description);
+        setLocation(userData.location);
+        setProfilePicture(userData.profilePicture);
+        fetchUserPhotos(token);
+        fetchUserComments(token);
       } else {
-        throw new Error('User not found');
+        throw new Error('Failed to fetch user profile');
       }
     } catch (error) {
       setProfileError("No se pudo cargar el perfil del usuario");
@@ -92,11 +100,15 @@ export default function UserProfile({ userId }: UserProfileProps) {
     }
   };
 
-  const fetchUserPhotos = async (userId: string) => {
+  const fetchUserPhotos = async (token: string) => {
     setIsLoadingPhotos(true);
     setPhotosError(null);
     try {
-      const response = await fetch(`/api/photos/${userId}`);
+      const response = await fetch('/api/photos', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const photos = await response.json();
         setUploadedPhotos(photos);
@@ -115,11 +127,15 @@ export default function UserProfile({ userId }: UserProfileProps) {
     }
   };
 
-  const fetchUserComments = async (userId: string) => {
+  const fetchUserComments = async (token: string) => {
     setIsLoadingComments(true);
     setCommentsError(null);
     try {
-      const response = await fetch(`/api/comments/${userId}`);
+      const response = await fetch('/api/user/comments', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const comments = await response.json();
         setUserComments(comments);
@@ -140,14 +156,37 @@ export default function UserProfile({ userId }: UserProfileProps) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const updatedUser = await updateUser(userId, { name, description, location, profilePicture });
-      setUser(updatedUser as User);
-      setIsEditing(false);
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
       toast({
-        title: "Éxito",
-        description: "Perfil actualizado correctamente",
+        title: "Error",
+        description: "No se encontró token de autenticación",
+        variant: "destructive",
       });
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/user', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name, description, location, profilePicture })
+      });
+
+      if (response.ok) {
+        const updatedUser = await response.json();
+        setUser(updatedUser);
+        setIsEditing(false);
+        toast({
+          title: "Éxito",
+          description: "Perfil actualizado correctamente",
+        });
+      } else {
+        throw new Error('Failed to update user profile');
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -166,14 +205,21 @@ export default function UserProfile({ userId }: UserProfileProps) {
     formData.append('file', file);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const fileName = `${userId}_${Date.now()}_${file.name}`;
-      const url = await uploadFileToS3(Buffer.from(buffer), fileName);
-      setProfilePicture(url);
-      toast({
-        title: "Éxito",
-        description: "Imagen de perfil subida correctamente",
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
       });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProfilePicture(data.url);
+        toast({
+          title: "Éxito",
+          description: "Imagen de perfil subida correctamente",
+        });
+      } else {
+        throw new Error('Failed to upload image');
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -238,11 +284,22 @@ export default function UserProfile({ userId }: UserProfileProps) {
   };
 
   const handleSaveComment = async (commentId: string) => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
+      toast({
+        title: "Error",
+        description: "No se encontró token de autenticación",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const response = await fetch(`/api/comments/${commentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ text: editedCommentText })
       });
@@ -269,6 +326,34 @@ export default function UserProfile({ userId }: UserProfileProps) {
     }
   };
 
+  // New function to handle sending emails
+  const handleSendEmail = async () => {
+    if (!user) return;
+
+    try {
+      const response = await sendEmail({
+        to: user.email,
+        subject: "Actualización de perfil",
+        html: "<p>Tu perfil ha sido actualizado correctamente.</p>"
+      });
+      
+      if (response.success) {
+        toast({
+          title: "Éxito",
+          description: "Email enviado correctamente",
+        });
+      } else {
+        throw new Error('Failed to send email');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo enviar el email",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoadingProfile) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -280,7 +365,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
   if (profileError) {
     return (
       <Alert variant="destructive" className="m-4">
-        <AlertCircle  className="h-4 w-4" />
+        <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
         <AlertDescription>{profileError}</AlertDescription>
         <Button onClick={fetchUserProfile} variant="outline" size="sm" className="mt-2">
@@ -359,7 +444,8 @@ export default function UserProfile({ userId }: UserProfileProps) {
               )}
             </AnimatePresence>
           </motion.div>
-          <CardTitle className="text-3xl font-bold text-center mt-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+          <CardTitle className="text-3xl font-bold text-center mt-4 bg
+-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
             {name}
           </CardTitle>
         </CardHeader>
@@ -475,6 +561,9 @@ export default function UserProfile({ userId }: UserProfileProps) {
                         <span>{location}</span>
                       </motion.div>
                     )}
+                    <Button onClick={handleSendEmail}>
+                      Enviar Email de Confirmación
+                    </Button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -489,7 +578,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{photosError}</AlertDescription>
-                  <Button onClick={() => fetchUserPhotos(userId)} variant="outline" size="sm" className="mt-2">
+                  <Button onClick={() => fetchUserPhotos(localStorage.getItem('token') || '')} variant="outline" size="sm" className="mt-2">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Intentar de nuevo
                   </Button>
@@ -524,7 +613,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>{commentsError}</AlertDescription>
-                  <Button onClick={() => fetchUserComments(userId)} variant="outline" size="sm" className="mt-2">
+                  <Button onClick={() => fetchUserComments(localStorage.getItem('token') || '')} variant="outline" size="sm" className="mt-2">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Intentar de nuevo
                   </Button>
@@ -593,3 +682,5 @@ export default function UserProfile({ userId }: UserProfileProps) {
     </motion.div>
   );
 }
+
+
